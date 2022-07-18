@@ -203,7 +203,8 @@ class Solver(object):
         if len(ckpt_list) == 0:
             return 0
 
-        ckpt_list = [int(x[0]) for x in ckpt_list]
+        # ckpt_list = [int(x[0]) for x in ckpt_list]
+        ckpt_list = [int(osp.basename(x).split('-')[0]) for x in ckpt_list]
         ckpt_list.sort()
         epoch = ckpt_list[-1]
         G_path = os.path.join(self.model_dir, '{}-G.ckpt'.format(epoch))
@@ -370,6 +371,7 @@ class Solver(object):
                 with torch.no_grad():
                     self.image_reporting(fixed_sketch, fixed_reference, fixed_elastic_reference, e + 1, postfix='')
                     self.image_reporting(shifted_fixed_sketch, fixed_reference, fixed_elastic_reference, e + 1, postfix='_shifted')
+                    self.image_reporting(shifted_fixed_sketch, reference, elastic_reference, e + 1, postfix='_sampled')
                     print('Saved real and fake images into {}...'.format(self.sample_dir))
             # Save model checkpoints.
             if (e + 1) % self.save_step == 0 and (e + 1) >= self.save_start:
