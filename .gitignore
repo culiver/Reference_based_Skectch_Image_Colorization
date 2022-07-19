@@ -1,5 +1,6 @@
 data/
 colorization_gan4/
+celebA100_wo_triple/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -4,7 +4,7 @@ MODEL_CONFIG:
 
 TRAINING_CONFIG:
 
-  EPOCH: 100
+  EPOCH: 5000
   BATCH_SIZE: 8
 
   # lr and lambda
@@ -52,9 +52,11 @@ TRAINING_CONFIG:
 
   # Directory
   IMG_DIR : 'data'
-  TRAIN_DIR : 'colorization_gan4'
+  # TRAIN_DIR : 'colorization_gan4'
+  TRAIN_DIR : 'celebA100_wo_triple'
   LOG_DIR : 'logs'
   SAMPLE_DIR : 'samples'
+  VAL_DIR : 'val'
   RESULT_DIR : 'results'
   MODEL_DIR : 'models'
 
@@ -63,10 +65,10 @@ TRAINING_CONFIG:
 
   # Step Size
 
-  SAMPLE_STEP : 1 # epoch based
+  SAMPLE_STEP : 10 # epoch based
   LOG_STEP : 100 # iteration based
-  SAVE_STEP : 5 # epoch based
-  SAVE_START : 10
+  SAVE_STEP : 50 # epoch based
+  SAVE_START : 100
   LR_DECAY_STEP : 20
 
 TEST_CONFIG:

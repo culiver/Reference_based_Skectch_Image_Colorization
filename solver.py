@@ -84,6 +84,7 @@ class Solver(object):
         self.sample_dir = os.path.join(self.train_dir, config['TRAINING_CONFIG']['SAMPLE_DIR'])
         self.result_dir = os.path.join(self.train_dir, config['TRAINING_CONFIG']['RESULT_DIR'])
         self.model_dir  = os.path.join(self.train_dir, config['TRAINING_CONFIG']['MODEL_DIR'])
+        self.val_dir  = os.path.join(self.train_dir, config['TRAINING_CONFIG']['VAL_DIR'])
 
         # Steps
         self.log_step       = config['TRAINING_CONFIG']['LOG_STEP']
@@ -215,7 +216,7 @@ class Solver(object):
         self.D.to(self.gpu)
         return epoch
 
-    def image_reporting(self, fixed_sketch, fixed_reference, fixed_elastic_reference, epoch, postfix=''):
+    def image_reporting(self, fixed_sketch, fixed_reference, fixed_elastic_reference, epoch, postfix='', mode='train'):
         image_report = list()
         image_report.append(fixed_sketch.expand_as(fixed_reference))
         image_report.append(fixed_elastic_reference)
@@ -223,8 +224,12 @@ class Solver(object):
         fake_result, _ = self.G(fixed_elastic_reference, fixed_sketch)
         image_report.append(fake_result)
         x_concat = torch.cat(image_report, dim=3)
-        sample_path = os.path.join(self.sample_dir, '{}-images{}.jpg'.format(epoch, postfix))
+        if mode == 'train':
+            sample_path = os.path.join(self.sample_dir, '{}-images{}.jpg'.format(epoch, postfix))
+        elif mode == 'val':
+            sample_path = os.path.join(self.val_dir, '{}-images{}.jpg'.format(epoch, postfix))
         save_image(self.denorm(x_concat.data.cpu()), sample_path, nrow=1, padding=0)
+    
 
     def train(self):
 
@@ -382,6 +387,52 @@ class Solver(object):
                 print('Saved model checkpoints into {}...'.format(self.model_dir))
 
         print('Training is finished')
+
+    def val(self):
+        
+        # Set data loader.
+        data_loader = self.data_loader
+        iterations = len(self.data_loader)
+        print('iterations : ', iterations)
+        # Fetch fixed inputs for debugging.
+        data_iter = iter(data_loader)
+        _, fixed_elastic_reference, fixed_reference, fixed_sketch = next(data_iter)
+
+        splited_fixed_sketch = list(torch.chunk(fixed_sketch, self.batch_size, dim=0))
+        first_fixed_sketch = splited_fixed_sketch[0]
+        del splited_fixed_sketch[0]
+        splited_fixed_sketch.append(first_fixed_sketch)
+        shifted_fixed_sketch = torch.cat(splited_fixed_sketch, dim=0)
+
+        fixed_sketch = fixed_sketch.to(self.gpu)
+        fixed_reference = fixed_reference.to(self.gpu)
+        fixed_elastic_reference = fixed_elastic_reference.to(self.gpu)
+        shifted_fixed_sketch = shifted_fixed_sketch.to(self.gpu)
+
+        # Learning rate cache for decaying.
+        g_lr = self.g_lr
+        d_lr = self.d_lr
+
+        start_epoch = self.restore_model()
+        start_time = time.time()
+        print('Start training...')
+        for i in range(iterations):
+            try:
+                _, elastic_reference, reference, sketch = next(data_iter)
+            except:
+                data_iter = iter(data_loader)
+                _, elastic_reference, reference, sketch = next(data_iter)
+
+            elastic_reference = elastic_reference.to(self.gpu)
+            reference = reference.to(self.gpu)
+            sketch = sketch.to(self.gpu)
+
+            fake_images, _ = self.G(elastic_reference, sketch)
+            with torch.no_grad():
+                self.image_reporting(sketch, reference, elastic_reference, i, postfix='', mode='val')
+                print('Saved real and fake images into {}...'.format(self.sample_dir))
+        
+        print('Validation is finished')
 
     def test(self):
         pass

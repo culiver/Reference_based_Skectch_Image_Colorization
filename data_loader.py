@@ -12,14 +12,15 @@ from utils import elastic_transform
 
 class DataSet(data.Dataset):
 
-    def __init__(self, config, img_transform_gt, img_transform_sketch):
+    def __init__(self, config, img_transform_gt, img_transform_sketch, mode):
         self.img_transform_gt = img_transform_gt
         self.img_transform_sketch = img_transform_sketch
+        self.mode = mode
         # self.img_dir = osp.join(config['TRAINING_CONFIG']['IMG_DIR'], config['TRAINING_CONFIG']['MODE'])
         self.img_size = (config['MODEL_CONFIG']['IMG_SIZE'], config['MODEL_CONFIG']['IMG_SIZE'], 3)
         self.img_dir = 'data'
 
-        self.data_list = glob.glob(os.path.join(self.img_dir, 'image', '*.jpg'))
+        self.data_list = glob.glob(os.path.join(self.img_dir, mode, 'image', '*.jpg'))
         self.data_list = [x.split(os.sep)[-1].split('.')[0] for x in self.data_list]
         self.data_list = list(set(self.data_list))
         #random.seed(config['TRAINING_CONFIG']['CPU_SEED'])
@@ -38,8 +39,8 @@ class DataSet(data.Dataset):
         fid = self.data_list[index]
         # reference = Image.open(osp.join(self.img_dir, '{}_color.png'.format(fid))).convert('RGB')
         # sketch = Image.open(osp.join(self.img_dir, '{}_sketch.png'.format(fid))).convert('L')
-        reference = Image.open(osp.join(self.img_dir, 'image', '{}.jpg'.format(fid))).convert('RGB')
-        sketch = Image.open(osp.join(self.img_dir, 'sketch', '{}.jpg'.format(fid))).convert('L')
+        reference = Image.open(osp.join(self.img_dir, self.mode, 'image', '{}.jpg'.format(fid))).convert('RGB')
+        sketch = Image.open(osp.join(self.img_dir, self.mode, 'sketch', '{}.jpg'.format(fid))).convert('L')
 
         if self.dist == 'uniform':
             noise = np.random.uniform(self.a, self.b, np.shape(reference))
@@ -81,7 +82,8 @@ def get_loader(config):
     img_transform_sketch.append(T.Normalize(mean=(0.5), std=(0.5)))
     img_transform_sketch = T.Compose(img_transform_sketch)
 
-    dataset = DataSet(config, img_transform_gt, img_transform_sketch)
+    dataset = DataSet(config, img_transform_gt, img_transform_sketch, mode=config['TRAINING_CONFIG']['MODE'])
+    config['TRAINING_CONFIG']['BATCH_SIZE'] = 1 if config['TRAINING_CONFIG']['MODE'] == 'val' else config['TRAINING_CONFIG']['BATCH_SIZE']
     data_loader = data.DataLoader(dataset=dataset,
                                   batch_size=config['TRAINING_CONFIG']['BATCH_SIZE'],
                                   shuffle=(config['TRAINING_CONFIG']['MODE'] == 'train'),
