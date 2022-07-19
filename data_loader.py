@@ -8,7 +8,8 @@ from torchvision import transforms as T
 from tps_transformation import tps_transform
 from PIL import Image
 from utils import elastic_transform
-
+import random
+import torch
 
 class DataSet(data.Dataset):
 
@@ -59,7 +60,16 @@ class DataSet(data.Dataset):
         else:
             augmented_reference = reference
 
-        return fid, self.img_transform_gt(augmented_reference), self.img_transform_gt(reference), self.img_transform_sketch(sketch)
+        seed = np.random.randint(2147483647) # make a seed with numpy generator 
+        random.seed(seed) # apply this seed to img tranfsorms
+        torch.manual_seed(seed) # needed for torchvision 0.7
+        augmented_reference = self.img_transform_gt(augmented_reference)
+
+        random.seed(seed) # apply this seed to img tranfsorms
+        torch.manual_seed(seed) # needed for torchvision 0.7
+        reference = self.img_transform_gt(reference)
+
+        return fid, augmented_reference, reference, self.img_transform_sketch(sketch)
 
     def __len__(self):
         """Return the number of images."""
@@ -75,6 +85,8 @@ def get_loader(config):
     img_transform_gt.append(T.Resize((img_size, img_size)))
     img_transform_gt.append(T.ToTensor())
     img_transform_gt.append(T.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+    if config['TRAINING_CONFIG']['MODE'] == 'train':
+        img_transform_gt.append(T.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5))
     img_transform_gt = T.Compose(img_transform_gt)
 
     img_transform_sketch.append(T.Resize((img_size, img_size)))
