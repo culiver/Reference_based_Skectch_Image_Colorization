@@ -38,17 +38,15 @@ class DataSet(data.Dataset):
 
     def __getitem__(self, index):
         fid = self.data_list[index]
-        # reference = Image.open(osp.join(self.img_dir, '{}_color.png'.format(fid))).convert('RGB')
-        # sketch = Image.open(osp.join(self.img_dir, '{}_sketch.png'.format(fid))).convert('L')
         reference = Image.open(osp.join(self.img_dir, self.mode, 'image', '{}.jpg'.format(fid))).convert('RGB')
         sketch = Image.open(osp.join(self.img_dir, self.mode, 'sketch', '{}.jpg'.format(fid))).convert('L')
 
         if self.dist == 'uniform':
-            noise = np.random.uniform(self.a, self.b, np.shape(reference))
+            noise = np.random.uniform(self.a, self.b, 3)
         else:
-            noise = np.random.normal(self.mean, self.std, np.shape(reference))
+            noise = np.random.normal(self.mean, self.std, 3)
 
-        reference = np.array(reference) + noise
+        reference = np.clip(np.array(reference) + noise, 0, 255)
         reference = Image.fromarray(reference.astype('uint8'))
 
         if self.augment == 'elastic':
@@ -60,13 +58,7 @@ class DataSet(data.Dataset):
         else:
             augmented_reference = reference
 
-        seed = np.random.randint(2147483647) # make a seed with numpy generator 
-        random.seed(seed) # apply this seed to img tranfsorms
-        torch.manual_seed(seed) # needed for torchvision 0.7
         augmented_reference = self.img_transform_gt(augmented_reference)
-
-        random.seed(seed) # apply this seed to img tranfsorms
-        torch.manual_seed(seed) # needed for torchvision 0.7
         reference = self.img_transform_gt(reference)
 
         return fid, augmented_reference, reference, self.img_transform_sketch(sketch)
@@ -85,8 +77,6 @@ def get_loader(config):
     img_transform_gt.append(T.Resize((img_size, img_size)))
     img_transform_gt.append(T.ToTensor())
     img_transform_gt.append(T.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
-    if config['TRAINING_CONFIG']['MODE'] == 'train':
-        img_transform_gt.append(T.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5))
     img_transform_gt = T.Compose(img_transform_gt)
 
     img_transform_sketch.append(T.Resize((img_size, img_size)))
