@@ -47,5 +47,11 @@ def tps_transform(img, num=4, dshape=None):
     theta = tps.tps_theta_from_points(c_src, c_dst, reduced=True)
     grid = tps.tps_grid(theta, c_dst, dshape)
     mapx, mapy = tps.tps_grid_to_remap(grid, img.shape)
-    return cv2.remap(img, mapx, mapy, cv2.INTER_CUBIC)
+
+    theta_inv = tps.tps_theta_from_points(c_dst, c_src, reduced=True)
+    grid_inv = tps.tps_grid(theta_inv, c_src, dshape)
+    mapx_inv, mapy_inv = tps.tps_grid_to_remap(grid_inv, img.shape)
+    map_inv = np.stack([mapx_inv, mapy_inv], axis=-1)
+
+    return cv2.remap(img, mapx, mapy, cv2.INTER_CUBIC), map_inv
 

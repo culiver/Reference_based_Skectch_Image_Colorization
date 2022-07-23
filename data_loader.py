@@ -10,6 +10,18 @@ from PIL import Image
 from utils import elastic_transform
 import random
 import torch
+import cv2
+import skimage.measure
+
+def average_pool(mat, kernel_size):
+    M, N = mat.shape[:2]
+    K, L = kernel_size
+
+    MK = M // K
+    NL = N // L
+    return mat[:MK*K, :NL*L].reshape(MK, K, NL, L, mat.shape[-1]).max(axis=(1, 3))
+
+
 
 class DataSet(data.Dataset):
 
@@ -41,27 +53,35 @@ class DataSet(data.Dataset):
         reference = Image.open(osp.join(self.img_dir, self.mode, 'image', '{}.jpg'.format(fid))).convert('RGB')
         sketch = Image.open(osp.join(self.img_dir, self.mode, 'sketch', '{}.jpg'.format(fid))).convert('L')
 
-        if self.dist == 'uniform':
-            noise = np.random.uniform(self.a, self.b, 3)
+        if self.mode == 'train':
+            if self.dist == 'uniform':
+                noise = np.random.uniform(self.a, self.b, 3)
+            else:
+                noise = np.random.normal(self.mean, self.std, 3)
+            reference = np.clip(np.array(reference) + noise, 0, 255)
         else:
-            noise = np.random.normal(self.mean, self.std, 3)
-
-        reference = np.clip(np.array(reference) + noise, 0, 255)
+            reference = np.array(reference)
         reference = Image.fromarray(reference.astype('uint8'))
 
         if self.augment == 'elastic':
             augmented_reference = elastic_transform(np.array(reference), 1000, 8, random_state=None)
             augmented_reference = Image.fromarray(augmented_reference)
         elif self.augment == 'tps':
-            augmented_reference = tps_transform(np.array(reference))
+            augmented_reference, map_inv = tps_transform(np.array(reference))
             augmented_reference = Image.fromarray(augmented_reference)
         else:
             augmented_reference = reference
 
         augmented_reference = self.img_transform_gt(augmented_reference)
         reference = self.img_transform_gt(reference)
-
-        return fid, augmented_reference, reference, self.img_transform_sketch(sketch)
+        map_inv = cv2.resize(map_inv, (self.img_size[0], self.img_size[1]))
+        map_inv = average_pool(map_inv, (16,16)) // 16
+        map_inv = np.clip(map_inv.astype(int), 0, 15)
+        
+        if self.mode == 'train':
+            return fid, augmented_reference, reference, self.img_transform_sketch(sketch), map_inv
+        else:            
+            return fid, augmented_reference, reference, self.img_transform_sketch(sketch)
 
     def __len__(self):
         """Return the number of images."""

@@ -218,16 +218,20 @@ class Solver(object):
 
     def image_reporting(self, fixed_sketch, fixed_reference, fixed_elastic_reference, epoch, postfix='', mode='train'):
         image_report = list()
-        image_report.append(fixed_sketch.expand_as(fixed_reference))
-        image_report.append(fixed_elastic_reference)
-        image_report.append(fixed_reference)
-        fake_result, _ = self.G(fixed_elastic_reference, fixed_sketch)
-        image_report.append(fake_result)
-        x_concat = torch.cat(image_report, dim=3)
         if mode == 'train':
             sample_path = os.path.join(self.sample_dir, '{}-images{}.jpg'.format(epoch, postfix))
+            image_report.append(fixed_sketch.expand_as(fixed_reference))
+            image_report.append(fixed_elastic_reference)
+            image_report.append(fixed_reference)
+            fake_result, _ = self.G(fixed_elastic_reference, fixed_sketch)
         elif mode == 'val':
             sample_path = os.path.join(self.val_dir, '{}-images{}.jpg'.format(epoch, postfix))
+            image_report.append(fixed_sketch.expand_as(fixed_reference))
+            image_report.append(fixed_reference)
+            fake_result, _ = self.G(fixed_reference, fixed_sketch)
+        image_report.append(fake_result)
+        x_concat = torch.cat(image_report, dim=3)
+        
         save_image(self.denorm(x_concat.data.cpu()), sample_path, nrow=1, padding=0)
     
 
@@ -239,7 +243,7 @@ class Solver(object):
         print('iterations : ', iterations)
         # Fetch fixed inputs for debugging.
         data_iter = iter(data_loader)
-        _, fixed_elastic_reference, fixed_reference, fixed_sketch = next(data_iter)
+        _, fixed_elastic_reference, fixed_reference, fixed_sketch, map_inv = next(data_iter)
 
         splited_fixed_sketch = list(torch.chunk(fixed_sketch, self.batch_size, dim=0))
         first_fixed_sketch = splited_fixed_sketch[0]
@@ -263,14 +267,15 @@ class Solver(object):
 
             for i in range(iterations):
                 try:
-                    _, elastic_reference, reference, sketch = next(data_iter)
+                    _, elastic_reference, reference, sketch, map_inv = next(data_iter)
                 except:
                     data_iter = iter(data_loader)
-                    _, elastic_reference, reference, sketch = next(data_iter)
+                    _, elastic_reference, reference, sketch, map_inv = next(data_iter)
 
                 elastic_reference = elastic_reference.to(self.gpu)
                 reference = reference.to(self.gpu)
                 sketch = sketch.to(self.gpu)
+                map_inv = map_inv.to(self.gpu)
 
                 loss_dict = dict()
                 if (i + 1) % self.d_critic == 0:
@@ -337,13 +342,26 @@ class Solver(object):
                     for layer in self.target_layer:
                         g_loss_percep += self.l1_loss(fake_activation[layer], real_activation[layer])
                         g_loss_style += self.l1_loss(self.gram_matrix(fake_activation[layer]), self.gram_matrix(real_activation[layer]))
+                    
+                    
 
                     if self.triplet:
-                        anchor = q_k_v_list[0].view(self.batch_size, -1)
-                        positive = q_k_v_list[1].contiguous().view(self.batch_size, -1)
-                        negative = q_k_v_list[2].contiguous().view(self.batch_size, -1)
-                        #g_loss_triple = self.triple_loss_custom(anchor=anchor, positive=positive, negative=negative, margin=self.triple_margin)
-                        g_loss_triple = self.triplet_loss(anchor=anchor, positive=positive, negative=negative)
+                        '''
+                        2022/07/24
+                        Inplemented by Andrew 
+                        '''
+                        # Get query and key
+                        query = q_k_v_list[0]
+                        key = q_k_v_list[1].permute(0, 2, 1)
+                        
+                        # Turning map_inv into index
+                        map_inv = map_inv.reshape(self.batch_size, -1, 2)
+                        pos_idx = (map_inv[:,:,0] + 16 * map_inv[:,:,1]).unsqueeze(-1).expand(key.shape)
+                        neg_idx = torch.randint(0, 16, key.shape, device=self.gpu)
+
+                        positive = torch.gather(key, 1, pos_idx)
+                        negative = torch.gather(key, 1, neg_idx)
+                        g_loss_triple = self.triplet_loss(anchor=query, positive=positive, negative=negative)
 
                     g_loss = self.lambda_g_fake * g_loss_fake + \
                     self.lambda_g_recon * g_loss_recon + \
@@ -396,18 +414,6 @@ class Solver(object):
         print('iterations : ', iterations)
         # Fetch fixed inputs for debugging.
         data_iter = iter(data_loader)
-        _, fixed_elastic_reference, fixed_reference, fixed_sketch = next(data_iter)
-
-        splited_fixed_sketch = list(torch.chunk(fixed_sketch, self.batch_size, dim=0))
-        first_fixed_sketch = splited_fixed_sketch[0]
-        del splited_fixed_sketch[0]
-        splited_fixed_sketch.append(first_fixed_sketch)
-        shifted_fixed_sketch = torch.cat(splited_fixed_sketch, dim=0)
-
-        fixed_sketch = fixed_sketch.to(self.gpu)
-        fixed_reference = fixed_reference.to(self.gpu)
-        fixed_elastic_reference = fixed_elastic_reference.to(self.gpu)
-        shifted_fixed_sketch = shifted_fixed_sketch.to(self.gpu)
 
         # Learning rate cache for decaying.
         g_lr = self.g_lr
@@ -427,7 +433,6 @@ class Solver(object):
             reference = reference.to(self.gpu)
             sketch = sketch.to(self.gpu)
 
-            fake_images, _ = self.G(elastic_reference, sketch)
             with torch.no_grad():
                 self.image_reporting(sketch, reference, elastic_reference, i, postfix='', mode='val')
                 print('Saved real and fake images into {}...'.format(self.sample_dir))
