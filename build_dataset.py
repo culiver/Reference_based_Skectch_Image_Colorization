@@ -3,9 +3,9 @@ import glob
 import os.path as osp
 import shutil
 
-split = 'train' 
-image_folder = 'data/{}/image'.format(split)
-sketch_folder = 'data/{}/sketch'.format(split)
+split = 'val' 
+image_folder = 'celebA1000/{}/image'.format(split)
+sketch_folder = 'celebA1000/{}/sketch'.format(split)
 os.makedirs(image_folder, exist_ok=True)
 os.makedirs(sketch_folder, exist_ok=True)
 
@@ -20,8 +20,11 @@ source_sketches = glob.glob(osp.join(source_sketch_folder, '*.jpg'))
 source_sketches.sort(key=lambda x:int(osp.basename(x.split('.')[0])))
 
 if split == 'train':
-    source_images = source_images[:100]
-    source_sketches = source_sketches[:100]
+    source_images = source_images[:1000]
+    source_sketches = source_sketches[:1000]
+elif split == 'val':
+    source_images = source_images[1000:2000]
+    source_sketches = source_sketches[1000:2000]
 
 for img, sketch in zip(source_images, source_sketches):
     shutil.copy2(img, image_folder)

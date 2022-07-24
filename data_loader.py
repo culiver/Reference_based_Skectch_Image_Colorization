@@ -31,7 +31,7 @@ class DataSet(data.Dataset):
         self.mode = mode
         # self.img_dir = osp.join(config['TRAINING_CONFIG']['IMG_DIR'], config['TRAINING_CONFIG']['MODE'])
         self.img_size = (config['MODEL_CONFIG']['IMG_SIZE'], config['MODEL_CONFIG']['IMG_SIZE'], 3)
-        self.img_dir = 'data'
+        self.img_dir = config['TRAINING_CONFIG']['IMG_DIR']
 
         self.data_list = glob.glob(os.path.join(self.img_dir, mode, 'image', '*.jpg'))
         self.data_list = [x.split(os.sep)[-1].split('.')[0] for x in self.data_list]

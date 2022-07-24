@@ -4,7 +4,7 @@ MODEL_CONFIG:
 
 TRAINING_CONFIG:
 
-  EPOCH: 5000
+  EPOCH: 1000
   BATCH_SIZE: 8
 
   # lr and lambda
@@ -51,7 +51,7 @@ TRAINING_CONFIG:
   D_SPEC : 'True'
 
   # Directory
-  IMG_DIR : 'data'
+  IMG_DIR : 'data/celebA100'
   # TRAIN_DIR : 'colorization_gan4'
   TRAIN_DIR : 'celebA100'
   LOG_DIR : 'logs'

@@ -3,6 +3,7 @@ colorization_gan4/
 celebA100_wo_triple/
 celebA100/
 celebA100_backup/
+celebA1000/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
