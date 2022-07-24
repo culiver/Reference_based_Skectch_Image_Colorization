@@ -357,9 +357,16 @@ class Solver(object):
                         
                         # Turning map_inv into index
                         map_inv = map_inv.reshape(self.batch_size, -1, 2)
-                        pos_idx = (map_inv[:,:,0] + 16 * map_inv[:,:,1]).unsqueeze(-1).expand(key.shape)
-                        neg_idx = torch.randint(0, 16, key.shape, device=self.gpu)
+                        pos_idx = (map_inv[:,:,0] + 16 * map_inv[:,:,1])
+                        neg_idx = torch.randint(0, 16, key.shape[:2], device=self.gpu)
+                        
+                        collision = pos_idx == neg_idx
+                        while collision.sum() > 0:
+                            neg_idx[collision] = torch.randint(0, 16, [collision.sum().item()], device=self.gpu)
+                            collision = pos_idx == neg_idx
 
+                        pos_idx = pos_idx.unsqueeze(-1).expand(key.shape)
+                        neg_idx = neg_idx.unsqueeze(-1).expand(key.shape)
                         positive = torch.gather(key, 1, pos_idx)
                         negative = torch.gather(key, 1, neg_idx)
                         g_loss_triple = self.triplet_loss(anchor=query, positive=positive, negative=negative)
@@ -383,9 +390,8 @@ class Solver(object):
                     if self.triplet:
                         loss_dict['G/loss_triple'] = g_loss_triple.item()
 
-                if total_step % self.log_step == 0:
-                    for tag, value in loss_dict.items():
-                        self.logger.scalar_summary(tag, value, total_step)
+                for tag, value in loss_dict.items():
+                    self.logger.scalar_summary(tag, value, total_step)
 
             if (e + 1) % self.sample_step == 0:
                 with torch.no_grad():
