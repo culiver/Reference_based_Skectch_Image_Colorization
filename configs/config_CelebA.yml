@@ -38,7 +38,7 @@ TRAINING_CONFIG:
   MODE : 'train'
   CPU_SEED : 123
   GPU_SEED : 456
-  USE_TENSORBOARD : 'False' # 'True' or 'False'
+  USE_TENSORBOARD : 'True' # 'True' or 'False'
 
   # noise parameter
   DIST : 'uniform' # of 'gaussian'

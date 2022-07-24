@@ -264,8 +264,9 @@ class Solver(object):
         start_time = time.time()
         print('Start training...')
         for e in range(start_epoch, self.epoch):
-
+            
             for i in range(iterations):
+                total_step = i + iterations*e
                 try:
                     _, elastic_reference, reference, sketch, map_inv = next(data_iter)
                 except:
@@ -382,13 +383,9 @@ class Solver(object):
                     if self.triplet:
                         loss_dict['G/loss_triple'] = g_loss_triple.item()
 
-                if (i + 1) % self.log_step == 0:
-                    et = time.time() - start_time
-                    et = str(datetime.timedelta(seconds=et))[:-7]
-                    log = "Epoch [{}/{}], Elapsed [{}], Iteration [{}/{}]".format(e+1, self.epoch, et, i + 1, iterations)
+                if total_step % self.log_step == 0:
                     for tag, value in loss_dict.items():
-                        log += ", {}: {:.4f}".format(tag, value)
-                    print(log)
+                        self.logger.scalar_summary(tag, value, total_step)
 
             if (e + 1) % self.sample_step == 0:
                 with torch.no_grad():
