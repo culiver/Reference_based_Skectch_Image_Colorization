@@ -182,21 +182,6 @@ class Solver(object):
         # by dividing by the number of element in each feature maps.
         return G.div(a * b * c * d)
 
-    def scaled_dot_product(self, a, b):
-        #https://github.com/pytorch/pytorch/issues/18027
-        channel = a.size(1)
-        scale_factor = torch.sqrt(torch.cuda.FloatTensor([channel]))
-        out = torch.bmm(a.view(self.batch_size, 1, channel), b.view(self.batch_size, channel , 1)).reshape(-1)
-        #out = torch.div(out, scale_factor)
-        return out
-
-    def triple_loss_custom(self, anchor, positive, negative, margin=12):
-        distance = self.scaled_dot_product(anchor, positive) - self.scaled_dot_product(anchor, negative) + margin
-        #print('distance : ',distance)
-        #print('torch.max(distance, torch.zeros_like(distance)) : ', torch.max(distance, torch.zeros_like(distance)))
-        loss = torch.mean(torch.max(distance, torch.zeros_like(distance)))
-        return loss
-
     def restore_model(self):
 
         ckpt_list = glob.glob(osp.join(self.model_dir, '*-G.ckpt'))
@@ -301,10 +286,14 @@ class Solver(object):
                         d_loss_gp = self.gradient_penalty(out_src, x_hat)
                         d_loss = self.lambda_d_real * d_loss_real + self.lambda_d_fake * d_loss_fake + self.lambda_d_gp * d_loss_gp
 
-                    # Backward and optimize.
-                    self.reset_grad()
-                    d_loss.backward()
-                    self.d_optimizer.step()
+                    # Tips for accumulative backward
+                    accum_steps = config['TRAINING_CONFIG']['ACC_STEP']
+                    d_loss = d_loss / accum_steps                
+                    d_loss.backward()                           
+                    if (total_step+1) % accum_steps == 0:           
+                        self.d_optimizer.step()                       
+                        self.d_optimizer.zero_grad()  
+
 
                     # Logging.
                     loss_dict['D/loss_real'] = self.lambda_d_real * d_loss_real.item()
@@ -354,16 +343,17 @@ class Solver(object):
                         # Get query and key
                         query = q_k_v_list[0]
                         key = q_k_v_list[1].permute(0, 2, 1)
-                        
+
+                        # Get batch_size, area, hidden_num of feature map
+                        b, a, h = key.shape
+                        l = int(a**0.5)
+
                         # Turning map_inv into index
-                        map_inv = map_inv.reshape(self.batch_size, -1, 2)
-                        pos_idx = (map_inv[:,:,0] + 16 * map_inv[:,:,1])
-                        neg_idx = torch.randint(0, 16, key.shape[:2], device=self.gpu)
-                        
+                        map_inv = map_inv.reshape(key.shape[0], a, 2)
+                        pos_idx = (map_inv[:,:,0] + l * map_inv[:,:,1])
+                        neg_idx = torch.randint(0, l, key.shape[:2], device=self.gpu)
                         collision = pos_idx == neg_idx
-                        while collision.sum() > 0:
-                            neg_idx[collision] = torch.randint(0, 16, [collision.sum().item()], device=self.gpu)
-                            collision = pos_idx == neg_idx
+                        neg_idx[collision] = (neg_idx[collision] + l//2) % l
 
                         pos_idx = pos_idx.unsqueeze(-1).expand(key.shape)
                         neg_idx = neg_idx.unsqueeze(-1).expand(key.shape)
@@ -378,10 +368,14 @@ class Solver(object):
                     if self.triplet:
                         g_loss += 1 * g_loss_triple
 
-                    self.reset_grad()
-                    g_loss.backward()
-                    self.g_optimizer.step()
-
+                    # Tips for accumulative backward
+                    accum_steps = config['TRAINING_CONFIG']['ACC_STEP']
+                    g_loss = g_loss / accum_steps                
+                    g_loss.backward()                           
+                    if (total_step+1) % accum_steps == 0:           
+                        self.g_optimizer.step()                       
+                        self.g_optimizer.zero_grad()    
+                    
                     # Logging.
                     loss_dict['G/loss_fake'] = self.lambda_g_fake * g_loss_fake.item()
                     loss_dict['G/loss_recon'] = self.lambda_g_recon * g_loss_recon.item()
